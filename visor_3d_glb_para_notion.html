@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Visor BIM & 3D GLB</title>
+  
+  <!-- Tailwind CSS para el diseño minimalista -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Google Model Viewer Script -->
+  <script type="module" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.4.0/model-viewer.min.js"></script>
+
+  <style>
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #fbfbfb;
+    }
+
+    model-viewer {
+      width: 100%;
+      height: 100%;
+      --poster-color: transparent;
+      outline: none;
+    }
+
+    /* Ocultar barra default de progreso de Google para usar la nuestra */
+    model-viewer::part(default-progress-bar) {
+      display: none;
+    }
+
+    /* Animación sutil de pulso para arrastrar archivo */
+    .drag-active {
+      border: 2px dashed #3b82f6 !important;
+      background-color: rgba(239, 246, 255, 0.85) !important;
+    }
+  </style>
+</head>
+<body class="relative w-full h-full select-none bg-neutral-50 text-neutral-800">
+
+  <!-- Componente Model Viewer -->
+  <model-viewer
+    id="viewer"
+    alt="Visor de modelo 3D GLB"
+    camera-controls
+    touch-action="pan-y"
+    auto-rotate
+    rotation-per-second="20deg"
+    shadow-intensity="1.2"
+    shadow-softness="0.8"
+    exposure="1.0"
+    interaction-prompt="auto"
+    loading="lazy"
+    ar
+    ar-modes="webxr scene-viewer quick-look">
+  </model-viewer>
+
+  <!-- Barra de Carga Minimalista -->
+  <div id="loading-bar-container" class="absolute top-0 left-0 w-full h-1 bg-neutral-200 z-30 transition-opacity duration-300">
+    <div id="loading-bar" class="h-full bg-blue-600 w-0 transition-all duration-150 ease-out"></div>
+  </div>
+
+  <!-- Notificación Toast en pantalla -->
+  <div id="toast" class="absolute top-4 left-1/2 -translate-x-1/2 z-40 bg-neutral-900/90 backdrop-blur text-white text-xs px-3.5 py-1.5 rounded-full shadow-lg opacity-0 pointer-events-none transition-all duration-300 transform -translate-y-2">
+    Cargando modelo...
+  </div>
+
+  <!-- Barra de Controles Flotante Superior -->
+  <div class="absolute top-3 right-3 flex items-center gap-1.5 z-20">
+    <!-- Selector de Archivo Oculto -->
+    <input type="file" id="file-input" accept=".glb,.gltf" class="hidden">
+    
+    <!-- Botón Subir Archivo Local -->
+    <button id="btn-upload" title="Cargar archivo local (GLB/GLTF)" class="flex items-center justify-center w-8 h-8 rounded-lg bg-white/90 hover:bg-white text-neutral-700 hover:text-black shadow-sm border border-neutral-200 backdrop-blur transition-all active:scale-95">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path>
+      </svg>
+    </button>
+
+    <!-- Botón Toggle Rotación Automática -->
+    <button id="btn-autorotate" title="Pausar/Reanudar rotación" class="flex items-center justify-center w-8 h-8 rounded-lg bg-white/90 hover:bg-white text-neutral-700 hover:text-black shadow-sm border border-neutral-200 backdrop-blur transition-all active:scale-95">
+      <svg id="icon-rotate" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+      </svg>
+    </button>
+
+    <!-- Botón Restablecer Cámara -->
+    <button id="btn-reset" title="Restablecer vista" class="flex items-center justify-center w-8 h-8 rounded-lg bg-white/90 hover:bg-white text-neutral-700 hover:text-black shadow-sm border border-neutral-200 backdrop-blur transition-all active:scale-95">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"></path>
+      </svg>
+    </button>
+
+    <!-- Botón Pantalla Completa -->
+    <button id="btn-fullscreen" title="Pantalla completa" class="flex items-center justify-center w-8 h-8 rounded-lg bg-white/90 hover:bg-white text-neutral-700 hover:text-black shadow-sm border border-neutral-200 backdrop-blur transition-all active:scale-95">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-5h-4m4 0v4m0-4l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4"></path>
+      </svg>
+    </button>
+  </div>
+
+  <!-- Área de Arrastre Drag & Drop (Superpuesta) -->
+  <div id="drop-overlay" class="pointer-events-none absolute inset-0 flex items-center justify-center z-10 transition-all opacity-0">
+    <div class="bg-white/95 backdrop-blur-md px-6 py-5 rounded-2xl border-2 border-blue-500 shadow-2xl text-center max-w-xs mx-4">
+      <div class="w-10 h-10 mx-auto mb-2 text-blue-600 bg-blue-50 rounded-full flex items-center justify-center">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+        </svg>
+      </div>
+      <p class="text-sm font-medium text-neutral-800">Suelta tu modelo aquí</p>
+      <p class="text-xs text-neutral-400 mt-0.5">Soporta formato .glb o .gltf</p>
+    </div>
+  </div>
+
+  <!-- Tag de Estado / Nombre del Modelo -->
+  <div class="absolute bottom-3 left-3 z-20 pointer-events-none">
+    <div class="inline-flex items-center gap-2 bg-white/80 backdrop-blur border border-neutral-200/80 px-2.5 py-1 rounded-md shadow-xs">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+      <span id="model-name" class="text-[11px] font-medium text-neutral-600 tracking-tight truncate max-w-[200px]">Cargando...</span>
+    </div>
+  </div>
+
+  <script>
+    const viewer = document.getElementById('viewer');
+    const loadingBar = document.getElementById('loading-bar');
+    const loadingContainer = document.getElementById('loading-bar-container');
+    const toast = document.getElementById('toast');
+    const modelNameTag = document.getElementById('model-name');
+    const fileInput = document.getElementById('file-input');
+    const dropOverlay = document.getElementById('drop-overlay');
+
+    // Modelo demo funcional de arquitectura por defecto si no se pasa parámetro
+    const DEFAULT_MODEL = 'https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/SheenChair/glTF-Binary/SheenChair.glb';
+
+    function showToast(message, duration = 2500) {
+      toast.textContent = message;
+      toast.classList.remove('opacity-0', '-translate-y-2');
+      toast.classList.add('opacity-100', 'translate-y-0');
+      
+      setTimeout(() => {
+        toast.classList.remove('opacity-100', 'translate-y-0');
+        toast.classList.add('opacity-0', '-translate-y-2');
+      }, duration);
+    }
+
+    function loadModelFromSource(src, label = 'Modelo 3D') {
+      loadingContainer.style.opacity = '1';
+      loadingBar.style.width = '10%';
+      modelNameTag.textContent = label;
+      viewer.src = src;
+    }
+
+    // Leer parámetro ?model= de la URL
+    function initViewerFromURL() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const modelUrl = urlParams.get('model');
+
+      if (modelUrl) {
+        try {
+          const parsed = new URL(modelUrl);
+          const filename = parsed.pathname.split('/').pop() || 'Modelo URL';
+          loadModelFromSource(modelUrl, decodeURIComponent(filename));
+        } catch (e) {
+          loadModelFromSource(modelUrl, 'Modelo URL');
+        }
+      } else {
+        loadModelFromSource(DEFAULT_MODEL, 'Silla de Diseño (Demo)');
+      }
+    }
+
+    viewer.addEventListener('progress', (event) => {
+      const progress = event.detail.totalProgress * 100;
+      loadingBar.style.width = `${progress}%`;
+      if (progress >= 100) {
+        setTimeout(() => {
+          loadingContainer.style.opacity = '0';
+          loadingBar.style.width = '0%';
+        }, 300);
+      }
+    });
+
+    viewer.addEventListener('load', () => {
+      showToast('Modelo cargado con éxito');
+    });
+
+    viewer.addEventListener('error', () => {
+      showToast('Error al cargar el archivo');
+      modelNameTag.textContent = 'Error de carga';
+      loadingContainer.style.opacity = '0';
+    });
+
+    // Botón Selector de Archivo
+    document.getElementById('btn-upload').addEventListener('click', () => {
+      fileInput.click();
+    });
+
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const fileURL = URL.createObjectURL(file);
+        loadModelFromSource(fileURL, file.name);
+      }
+    });
+
+    // Botón Toggle Auto-Rotación
+    const btnAutoRotate = document.getElementById('btn-autorotate');
+    btnAutoRotate.addEventListener('click', () => {
+      if (viewer.autoRotate) {
+        viewer.autoRotate = false;
+        btnAutoRotate.classList.add('opacity-50');
+        showToast('Auto-rotación desactivada');
+      } else {
+        viewer.autoRotate = true;
+        btnAutoRotate.classList.remove('opacity-50');
+        showToast('Auto-rotación activada');
+      }
+    });
+
+    // Botón Resetear Cámara
+    document.getElementById('btn-reset').addEventListener('click', () => {
+      viewer.cameraOrbit = '0deg 75deg 105%';
+      viewer.cameraTarget = 'auto auto auto';
+      showToast('Vista restablecida');
+    });
+
+    // Botón Pantalla Completa
+    document.getElementById('btn-fullscreen').addEventListener('click', () => {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(() => {});
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    });
+
+    window.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropOverlay.classList.remove('opacity-0', 'pointer-events-none');
+      dropOverlay.classList.add('opacity-100');
+    });
+
+    window.addEventListener('dragleave', (e) => {
+      if (e.clientX <= 0 || e.clientY <= 0) {
+        dropOverlay.classList.remove('opacity-100');
+        dropOverlay.classList.add('opacity-0', 'pointer-events-none');
+      }
+    });
+
+    window.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropOverlay.classList.remove('opacity-100');
+      dropOverlay.classList.add('opacity-0', 'pointer-events-none');
+
+      const file = e.dataTransfer.files[0];
+      if (file && (file.name.endsWith('.glb') || file.name.endsWith('.gltf'))) {
+        const fileURL = URL.createObjectURL(file);
+        loadModelFromSource(fileURL, file.name);
+      } else if (file) {
+        showToast('Formato no soportado. Usa .glb o .gltf');
+      }
+    });
+
+    // Inicializar carga
+    window.addEventListener('DOMContentLoaded', initViewerFromURL);
+  </script>
+</body>
+</html>
